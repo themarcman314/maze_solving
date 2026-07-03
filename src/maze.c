@@ -1,60 +1,87 @@
-#include "raylib.h"
+#include "maze.h"
+#include <stdint.h>
+#include <stdlib.h>
 
-typedef struct {
-	unsigned size;
-	Color c;
-	float space_between_rectangles;
-	float rectangle_short_width;
-} maze_grid;
+struct Maze {
+	int width;
+	int height;
+	uint8_t *cells;
+};
 
-typedef struct {
-	unsigned x;
-	unsigned y;
-} coords;
-
-coords center;
-
-void maze_square_grid_draw(maze_grid const *maze_g);
-
-void UpdateDrawFrame(void) {
-	BeginDrawing();
-
-	center.x = GetScreenWidth() / 2;
-	center.y = GetScreenHeight() / 2;
-
-	maze_grid maze_grid = {10, GRAY, 50.f, 5.f};
-
-	ClearBackground(BLACK);
-	maze_square_grid_draw(&maze_grid);
-
-	EndDrawing();
+static inline int get_index(const Maze *maze, int x, int y) {
+	return y * maze->width + x;
 }
 
-void maze_square_grid_draw(maze_grid const *maze_grid) {
+Maze *maze_create(int width, int height) {
+	Maze *maze = malloc(sizeof(Maze));
+	if (!maze)
+		return NULL;
 
-	float long_length =
-	    maze_grid->space_between_rectangles * maze_grid->size +
-	    maze_grid->rectangle_short_width;
+	maze->width = width;
+	maze->height = height;
 
-	float offset_x = center.x - long_length / 2;
-	float offset_y = center.y - long_length / 2;
-
-	for (unsigned i = 0; i <= maze_grid->size; i++) {
-		Rectangle maze_wall = {
-		    .x = offset_x,
-		    .y = offset_y + maze_grid->space_between_rectangles * i,
-		    .width = long_length,
-		    .height = maze_grid->rectangle_short_width};
-
-		DrawRectangleRec(maze_wall, maze_grid->c);
+	maze->cells = calloc(width * height, sizeof(uint8_t));
+	if (!maze->cells) {
+		free(maze);
+		return NULL;
 	}
-	for (unsigned i = 0; i <= maze_grid->size; i++) {
-		Rectangle maze_wall = {
-		    .x = offset_x + maze_grid->space_between_rectangles * i,
-		    .y = offset_y,
-		    .width = maze_grid->rectangle_short_width,
-		    .height = long_length};
+	maze_open_path(maze, 0, 0, DIR_SOUTH);
+	return maze;
+}
 
-		DrawRectangleRec(maze_wall, maze_grid->c);
+void maze_destroy(Maze *maze) {
+	if (maze) {
+		free(maze->cells);
+		free(maze);
+	}
+}
+
+int maze_get_width(const Maze *maze) { return maze ? maze->width : 0; }
+int maze_get_height(const Maze *maze) { return maze ? maze->height : 0; }
+
+bool maze_is_valid_cell(const Maze *maze, int x, int y) {
+	if (!maze)
+		return false;
+	return (x >= 0 && x < maze->width && y >= 0 && y < maze->height);
+}
+
+bool maze_has_path(const Maze *maze, int x, int y, Direction dir) {
+	if (!maze_is_valid_cell(maze, x, y))
+		return false;
+	return (maze->cells[get_index(maze, x, y)] & dir) != 0;
+}
+
+void maze_open_path(Maze *maze, int x, int y, Direction dir) {
+	// clear on current coords
+	maze->cells[get_index(maze, x, y)] |= dir;
+
+	// where should adjacent cell be ?
+	int x_adj = x;
+	int y_adj = y;
+	Direction dir_adjacent_to_clear;
+
+	switch (dir) {
+	case DIR_NORTH:
+		y_adj -= 1;
+		dir_adjacent_to_clear = DIR_SOUTH;
+		break;
+	case DIR_SOUTH:
+		y_adj += 1;
+		dir_adjacent_to_clear = DIR_NORTH;
+		break;
+	case DIR_EAST:
+		x_adj += 1;
+		dir_adjacent_to_clear = DIR_WEST;
+		break;
+	case DIR_WEST:
+		x_adj -= 1;
+		dir_adjacent_to_clear = DIR_EAST;
+		break;
+	}
+	// does it exist ?
+	if (maze_is_valid_cell(maze, x_adj, y_adj)) {
+		// clear adjacent cell with opposite dir
+		maze->cells[get_index(maze, x_adj, y_adj)] |=
+		    dir_adjacent_to_clear;
 	}
 }
